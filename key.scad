@@ -10,14 +10,29 @@ use<MCAD/2Dshapes.scad>;
 $fa=5; 
 $fs=0.01;
 
-ASSEMBLED = false;
+ASSEMBLED = true;
 
+// Module
 M = 1;
+// Ratio between the x/y from the Somsky gear solver and our coordinates
 XY_SCALE = 0.5;
-AXEL_R = 0.4;
+
+// Radius of axle holes
+AXLE_R = 0.4;
+
+// Height of each layer
 H = 4;
 
+// Pressure angle
+W = 25;
+
+RING_GEAR_TEETH = 53;
+RING_GEAR_D = 70;
+CARRIER_INSET = 6;
+
 /**
+Taken from: https://tomas.rokicki.com/somsky.html
+
 offset = 18.07266195954014 mingap=5.558356361320534
 D: r=53 x=0 y=0
 A: r=26 x=0 y=-18.07266195954014
@@ -27,10 +42,6 @@ B': r=16 x=36.951605920044734 y=1.8917769238774214
 C': r=19 x=-30.509585009171065 y=15.005506408254414
 **/
 
-RING_GEAR_TEETH = 53;
-RING_GEAR_D = 70;
-CARRIER_INSET = 6;
-
 GEARS = [
   [26, 0, -18.073],
   [11, -36.95, -19.96],
@@ -39,11 +50,14 @@ GEARS = [
   [19, -30.51, 15.01]
 ];
 
-function gearOffset(i, acc = 0) = (i == 0 ? acc : gearOffset(i - 1, acc + (0.5 * GEARS[i - 1][0] + 0.5 * GEARS[i][0]) + 3));
+function gear2dOffset(i, acc = 0) =
+  i == 0
+    ? acc
+    : gear2dOffset(i - 1, acc + (0.5 * GEARS[i - 1][0] + 0.5 * GEARS[i][0]) + 3);
 
 module ring() {
   // Ring Gear
-  ring2D(M, RING_GEAR_TEETH, D=RING_GEAR_D);
+  ring2D(M, RING_GEAR_TEETH, D=RING_GEAR_D, w=W);
 }
 
 module gears() {
@@ -52,14 +66,14 @@ module gears() {
 
     pos = ASSEMBLED
       ? [gear[1] * XY_SCALE, gear[2] * XY_SCALE]
-      : [gearOffset(i), -60];
+      : [gear2dOffset(i), -60];
 
     translate(pos) {
       difference() {
         color([.3, 0, 0]) {
-          gear2D(M, gear[0]);
+          gear2D(M, gear[0], w=W);
         }
-        circle(r=AXEL_R);
+        circle(r=AXLE_R);
       }
     }
   }
@@ -68,7 +82,7 @@ module gears() {
 module carrierHolder() {
   difference() {
     circle(d=RING_GEAR_D);
-    circle(d=RING_GEAR_D - CARRIER_INSET + 0.5);
+    circle(d=RING_GEAR_D - CARRIER_INSET + 0.25);
   }
 }
 
@@ -96,12 +110,21 @@ module carrier() {
           circle(d=gear[0] - 2);
         }
       }
+
+      // Add a full half circle so we know that we can cover the whole
+      // colored background.
+      difference() {
+        circle(d=RING_GEAR_D - CARRIER_INSET);
+        rotate([0, 0, -10]) {
+          donutSlice(0, 100, 0, 180);
+        }
+      }
     }
 
     // Removes the hole for the gear axles
     for (gear=GEARS) {
       translate([gear[1] * XY_SCALE, gear[2] * XY_SCALE]) {
-        circle(r=AXEL_R);
+        circle(r=AXLE_R);
       }
     }
   }
@@ -122,7 +145,7 @@ module driver() {
     difference() {
       union() {
         difference() {
-          gear2D(M * 1.5, 20);
+          gear2D(M * 1.45, 20);
           circle(d=20);
         }
         circle(d=8);
@@ -134,7 +157,7 @@ module driver() {
         }
       }
 
-      circle(r=AXEL_R);
+      circle(r=AXLE_R);
     }
   }
 }
@@ -188,9 +211,22 @@ if (ASSEMBLED) {
   driver();
   translate([75, 0, 0]) {
     carrier();
-    carrierHolder();
   }
   translate([150, 0, 0]) {
+    carrierHolder();
+  }
+  translate([225, 0, 0]) {
     back();
   }
+}
+
+// 2D adaptation of the gears.scad ring algorithm
+module ring2D(m = 1, z = 10, x = 0, h = 4, w = 20, D = 0, clearance = -.1) 
+{
+   D_= D==0 ? m*(z+x+4):D; 
+   difference()
+   {
+    circle(r = D_/2);
+		gear2D(m, z, x, w, clearance = clearance); 
+	}
 }
